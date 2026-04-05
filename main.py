@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 from routers.assessment import router as assessment_router
 import os
-
+from routers.evidence import router as evidence_router
 load_dotenv()
 
 app = FastAPI(
@@ -28,7 +28,7 @@ app.add_middleware(
 
 # ── Routers ───────────────────────────────────────────────────────────────────
 app.include_router(assessment_router)
-
+app.include_router(evidence_router)
 
 @app.get("/", tags=["Root"])
 async def root():

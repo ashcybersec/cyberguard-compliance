@@ -1,3 +1,5 @@
+from dotenv import load_dotenv
+load_dotenv()
 import json
 import os
 import anthropic
@@ -12,7 +14,8 @@ class ComplianceAgent:
     """
 
     MODEL    = "claude-haiku-4-5"
-    MAX_TOKENS = 4096
+    MAX_TOKENS = 8096
+
 
     def __init__(self):
         api_key = os.getenv("ANTHROPIC_API_KEY")
