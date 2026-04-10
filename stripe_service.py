@@ -1,4 +1,5 @@
 import os
+import json
 import stripe
 from dotenv import load_dotenv
 
@@ -6,16 +7,25 @@ load_dotenv()
 
 stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
 
-_payload_store: dict = {}
+STORE_DIR = "/tmp/cyberguard_sessions"
+os.makedirs(STORE_DIR, exist_ok=True)
 
 def store_payload(session_id: str, payload: dict):
-    _payload_store[session_id] = payload
+    path = os.path.join(STORE_DIR, f"{session_id}.json")
+    with open(path, "w") as f:
+        json.dump(payload, f)
 
 def retrieve_payload(session_id: str) -> dict | None:
-    return _payload_store.get(session_id)
+    path = os.path.join(STORE_DIR, f"{session_id}.json")
+    if not os.path.exists(path):
+        return None
+    with open(path) as f:
+        return json.load(f)
 
 def delete_payload(session_id: str):
-    _payload_store.pop(session_id, None)
+    path = os.path.join(STORE_DIR, f"{session_id}.json")
+    if os.path.exists(path):
+        os.remove(path)
 
 def create_checkout_session(payload: dict, success_url: str, cancel_url: str):
     session = stripe.checkout.Session.create(
