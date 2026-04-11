@@ -33,7 +33,7 @@ def create_checkout_session(payload: dict, success_url: str, cancel_url: str):
         line_items=[{
             "price_data": {
                 "currency": "gbp",
-                "unit_amount": 4900,
+                "unit_amount": 999,
                 "product_data": {
                     "name": "CyberGuard Evidence Pack",
                     "description": "7 submission-ready Word policy documents aligned to NCSC Cyber Essentials v3.3.",
