@@ -26,7 +26,7 @@ async def create_checkout(body: CheckoutBody):
     try:
         checkout_url, session_id = create_checkout_session(
             payload=body.payload,
-            success_url="https://cyberguard-compliance-production.up.railway.app/api/v1/download-pack?session_id={CHECKOUT_SESSION_ID}",
+            success_url=f"{FRONTEND_URL}/success?session_id={{CHECKOUT_SESSION_ID}}",
             cancel_url=f"{FRONTEND_URL}",
         )
         return {"checkout_url": checkout_url, "session_id": session_id}
