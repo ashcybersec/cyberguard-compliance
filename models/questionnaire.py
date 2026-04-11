@@ -66,7 +66,7 @@ class AccessControlControl(BaseModel):
     admin_access_restricted:        bool = Field(..., description="Admin privileges are limited to those who need them")
     mfa_for_remote_access:          bool = Field(..., description="MFA enforced for remote access")
     offboarding_process_exists:     bool = Field(..., description="Access is promptly removed when staff leave")
-    privileged_account_monitoring:  bool = Field(..., description="Privileged accounts are monitored and reviewed regularly")
+    privileged_account_monitoring:  Optional[bool] = Field(None, description="Privileged accounts are monitored and reviewed regularly")
     mfa_on_cloud_services:          Optional[bool] = Field(None, description="MFA enabled on M365/Google Workspace for all users")
     mfa_on_other_cloud:             Optional[bool] = Field(None, description="MFA enabled on other cloud services")
     separate_admin_accounts:        Optional[bool] = Field(None, description="IT admins use separate accounts for admin tasks")
