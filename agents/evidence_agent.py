@@ -18,7 +18,7 @@ DOCUMENT_KEYS = [
 
 class EvidencePackAgent:
     MODEL      = "claude-haiku-4-5"
-    MAX_TOKENS = 4096
+    MAX_TOKENS = 8096
 
     def __init__(self):
         api_key = os.getenv("ANTHROPIC_API_KEY")
@@ -55,8 +55,15 @@ class EvidencePackAgent:
                 result = json.loads(raw)
                 documents[doc_key] = result.get(doc_key, "")
 
-            except json.JSONDecodeError as e:
-                raise ValueError(f"Invalid JSON for {doc_key}: {e}")
+            except json.JSONDecodeError:
+                # Truncated JSON — extract content between first { and last }
+                try:
+                    start = raw.index('{')
+                    end   = raw.rindex('}') + 1
+                    result = json.loads(raw[start:end])
+                    documents[doc_key] = result.get(doc_key, raw[start:end])
+                except Exception:
+                    documents[doc_key] = raw
             except anthropic.APIError as e:
                 raise RuntimeError(f"Claude API error on {doc_key}: {e}")
 
