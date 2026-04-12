@@ -1,55 +1,54 @@
 import os
 import uuid
 import zipfile
+import re
 from datetime import date
 from docx import Document
 from docx.shared import Pt, RGBColor, Inches, Cm
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.oxml.ns import qn
 from docx.oxml import OxmlElement
+import io
 
 
 # ── Brand colours ──────────────────────────────────────────────────────────────
-NAVY  = RGBColor(0x0D, 0x1B, 0x2A)
-CYAN  = RGBColor(0x00, 0xC2, 0xCB)
-GREY  = RGBColor(0x44, 0x55, 0x66)
-BLACK = RGBColor(0x11, 0x11, 0x11)
+NAVY   = RGBColor(0x0D, 0x1B, 0x2A)
+CYAN   = RGBColor(0x00, 0xC2, 0xCB)
+GREY   = RGBColor(0x55, 0x66, 0x77)
+LGREY  = RGBColor(0x88, 0x99, 0xAA)
+BLACK  = RGBColor(0x1A, 0x1A, 0x2E)
+WHITE  = RGBColor(0xFF, 0xFF, 0xFF)
 
 DOCUMENT_TITLES = {
-    "scope_statement":            "Cyber Essentials — Scope Statement",
-    "information_security_policy":"Information Security Policy",
-    "access_control_policy":      "Access Control Policy",
-    "patch_management_policy":    "Patch Management Policy",
-    "firewall_network_policy":    "Firewall & Network Security Policy",
-    "malware_protection_policy":  "Malware Protection Policy",
-    "asset_register_guidance":    "Asset Register — Guidance & Template",
+    "scope_statement":             "Cyber Essentials — Scope Statement",
+    "information_security_policy": "Information Security Policy",
+    "access_control_policy":       "Access Control Policy",
+    "patch_management_policy":     "Patch Management Policy",
+    "firewall_network_policy":     "Firewall & Network Security Policy",
+    "malware_protection_policy":   "Malware Protection Policy",
+    "asset_register_guidance":     "Asset Register — Guidance & Template",
 }
 
 DOCUMENT_REFS = {
-    "scope_statement":            "CG-SCOPE-001",
-    "information_security_policy":"CG-POL-001",
-    "access_control_policy":      "CG-POL-002",
-    "patch_management_policy":    "CG-POL-003",
-    "firewall_network_policy":    "CG-POL-004",
-    "malware_protection_policy":  "CG-POL-005",
-    "asset_register_guidance":    "CG-REG-001",
+    "scope_statement":             "CG-SCOPE-001",
+    "information_security_policy": "CG-POL-001",
+    "access_control_policy":       "CG-POL-002",
+    "patch_management_policy":     "CG-POL-003",
+    "firewall_network_policy":     "CG-POL-004",
+    "malware_protection_policy":   "CG-POL-005",
+    "asset_register_guidance":     "CG-REG-001",
 }
 
 
 class EvidencePackBuilder:
-    """Converts AI-generated document text into branded Word (.docx) files and zips them."""
-
-    OUTPUT_DIR = os.getenv("REPORT_OUTPUT_DIR", "reports")
+    OUTPUT_DIR = os.getenv("REPORT_OUTPUT_DIR", "/tmp/reports")
 
     def __init__(self):
         os.makedirs(self.OUTPUT_DIR, exist_ok=True)
 
     def build_zip(self, company_name: str, documents: dict) -> str:
-        """
-        Build all 7 Word documents and return path to ZIP archive.
-        """
         session_id = uuid.uuid4().hex[:8]
-        safe_name  = company_name.replace(" ", "_").replace("/", "-")
+        safe_name  = company_name.replace(" ", "_").replace("/", "-")[:40]
         zip_path   = f"{self.OUTPUT_DIR}/CyberGuard_EvidencePack_{safe_name}_{session_id}.zip"
 
         with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
@@ -63,185 +62,245 @@ class EvidencePackBuilder:
         return zip_path
 
     def _build_docx(self, company: str, title: str, ref: str, content: str) -> bytes:
-        """Build a single branded Word document and return bytes."""
         doc = Document()
 
-        # ── Page margins ──────────────────────────────────────────────────────
+        # Page margins
         for section in doc.sections:
-            section.top_margin    = Cm(2.0)
-            section.bottom_margin = Cm(2.0)
-            section.left_margin   = Cm(2.5)
+            section.top_margin    = Cm(2.2)
+            section.bottom_margin = Cm(2.2)
+            section.left_margin   = Cm(2.8)
             section.right_margin  = Cm(2.5)
 
-        # ── Header ────────────────────────────────────────────────────────────
+        # Header
         header = doc.sections[0].header
-        htbl   = header.add_table(1, 2, width=Inches(6))
-        htbl.style = "Table Grid"
+        htbl   = header.add_table(1, 2, width=Inches(6.5))
         self._remove_table_borders(htbl)
 
         left  = htbl.cell(0, 0).paragraphs[0]
         right = htbl.cell(0, 1).paragraphs[0]
 
-        run_l = left.add_run("CyberGuard")
-        run_l.bold      = True
-        run_l.font.size = Pt(11)
-        run_l.font.color.rgb = CYAN
-        left.alignment  = WD_ALIGN_PARAGRAPH.LEFT
+        rl = left.add_run("CyberGuard Essentials")
+        rl.bold = True
+        rl.font.size = Pt(10)
+        rl.font.color.rgb = CYAN
+        rl.font.name = "Calibri"
+        left.alignment = WD_ALIGN_PARAGRAPH.LEFT
 
-        run_r = right.add_run(f"{ref}  |  {company}")
-        run_r.font.size      = Pt(8)
-        run_r.font.color.rgb = GREY
-        right.alignment      = WD_ALIGN_PARAGRAPH.RIGHT
+        rr = right.add_run(f"{ref}  ·  {company}")
+        rr.font.size = Pt(8)
+        rr.font.color.rgb = LGREY
+        rr.font.name = "Calibri"
+        right.alignment = WD_ALIGN_PARAGRAPH.RIGHT
 
-        self._add_hline(header)
+        self._add_cyan_rule(header)
 
-        # ── Cover block ───────────────────────────────────────────────────────
+        # Cover block
         doc.add_paragraph()
 
-        p_company = doc.add_paragraph()
-        r = p_company.add_run(company.upper())
-        r.bold = True
-        r.font.size      = Pt(9)
-        r.font.color.rgb = GREY
-        r.font.name      = "Calibri"
-        p_company.alignment = WD_ALIGN_PARAGRAPH.LEFT
+        pc = doc.add_paragraph()
+        rc = pc.add_run(company.upper())
+        rc.font.size = Pt(8)
+        rc.font.color.rgb = LGREY
+        rc.font.name = "Calibri"
+        rc.bold = True
+        pc.alignment = WD_ALIGN_PARAGRAPH.LEFT
+        pc.paragraph_format.space_after = Pt(4)
 
-        p_title = doc.add_paragraph()
-        r2 = p_title.add_run(title)
-        r2.bold          = True
-        r2.font.size     = Pt(20)
-        r2.font.color.rgb = NAVY
-        r2.font.name     = "Calibri"
-        p_title.alignment = WD_ALIGN_PARAGRAPH.LEFT
+        pt = doc.add_paragraph()
+        rt = pt.add_run(title)
+        rt.bold = True
+        rt.font.size = Pt(22)
+        rt.font.color.rgb = NAVY
+        rt.font.name = "Calibri"
+        pt.alignment = WD_ALIGN_PARAGRAPH.LEFT
+        pt.paragraph_format.space_after = Pt(2)
 
-        # Cyan underline bar
-        self._add_colour_bar(doc, CYAN)
+        # Thick cyan rule under title
+        self._add_thick_rule(doc, "00C2CB", thickness=18)
 
-        meta = doc.add_paragraph()
-        meta.add_run(
+        pm = doc.add_paragraph()
+        rm = pm.add_run(
             f"Version 1.0  ·  {date.today().strftime('%d %B %Y')}  ·  "
-            f"NCSC Cyber Essentials v3.3 Aligned"
-        ).font.size = Pt(9)
-        meta.runs[0].font.color.rgb = GREY
-        meta.alignment = WD_ALIGN_PARAGRAPH.LEFT
+            f"NCSC Cyber Essentials v3.3  ·  CONFIDENTIAL"
+        )
+        rm.font.size = Pt(8.5)
+        rm.font.color.rgb = LGREY
+        rm.font.name = "Calibri"
+        pm.alignment = WD_ALIGN_PARAGRAPH.LEFT
+        pm.paragraph_format.space_after = Pt(16)
 
-        doc.add_paragraph()
-
-        # ── Body content ──────────────────────────────────────────────────────
+        # Body
         self._render_content(doc, content)
 
-        # ── Footer ────────────────────────────────────────────────────────────
+        # Footer
         footer = doc.sections[0].footer
-        self._add_hline(footer)
+        self._add_cyan_rule(footer)
         fp = footer.add_paragraph()
         fp.add_run(
-            f"© {date.today().year} CyberGuard — ashcybersec.co.uk  ·  "
-            f"Aligned to NCSC Cyber Essentials v3.3  ·  {ref}"
-        ).font.size = Pt(8)
-        fp.runs[0].font.color.rgb = GREY
+            f"© {date.today().year} Corvaxis Ltd · ceready.co.uk  ·  "
+            f"NCSC Cyber Essentials v3.3  ·  {ref}"
+        ).font.size = Pt(7.5)
+        fp.runs[0].font.color.rgb = LGREY
+        fp.runs[0].font.name = "Calibri"
         fp.alignment = WD_ALIGN_PARAGRAPH.CENTER
 
-        # ── Return bytes ──────────────────────────────────────────────────────
-        import io
         buf = io.BytesIO()
         doc.save(buf)
         return buf.getvalue()
 
-    def _render_content(self, doc: Document, content: str):
-        """
-        Parse the AI-generated content and render it into the Word document.
-        Handles headings (lines starting with ##), tables (| delimited),
-        bullet lists (- prefix), and regular paragraphs.
-        """
-        # Unescape literal \n sequences from JSON string content
-        content = content.replace('\\n', '\n').replace('\\"', '"').replace("\\'", "'")
-        # Strip any JSON wrapper if present
-        if content.strip().startswith('{'):
+    def _clean_content(self, content: str) -> str:
+        """Clean and normalise content before rendering."""
+        # Unescape JSON string escapes
+        content = content.replace('\\n', '\n')
+        content = content.replace('\\"', '"')
+        content = content.replace("\\'", "'")
+        content = content.replace('\\t', '    ')
+
+        # Strip JSON wrapper if present
+        stripped = content.strip()
+        if stripped.startswith('{'):
             try:
                 import json
-                parsed = json.loads(content)
+                parsed = json.loads(stripped)
                 content = list(parsed.values())[0] if parsed else content
             except Exception:
                 pass
-        lines = content.split("\n")
+
+        # Remove lines that are just underscores (horizontal rules) — we'll use proper Word rules
+        lines = content.split('\n')
+        cleaned = []
+        for line in lines:
+            stripped_line = line.strip()
+            # Skip lines that are just underscores, dashes or equals (markdown dividers)
+            if re.match(r'^[_\-=]{4,}$', stripped_line):
+                continue
+            cleaned.append(line)
+
+        return '\n'.join(cleaned)
+
+    def _render_content(self, doc: Document, content: str):
+        content = self._clean_content(content)
+        lines = content.split('\n')
         i = 0
+        prev_was_heading = False
+
         while i < len(lines):
-            line = lines[i].strip()
+            line = lines[i]
+            stripped = line.strip()
 
-            # Skip empty lines — add spacing
-            if not line:
+            # Empty line
+            if not stripped:
                 i += 1
                 continue
 
-            # Heading level 1
-            if line.startswith("# ") and not line.startswith("##"):
-                p = doc.add_heading(line[2:].strip(), level=1)
-                self._style_heading(p, 1)
+            # H1
+            if stripped.startswith('# ') and not stripped.startswith('##'):
+                p = doc.add_heading(stripped[2:].strip(), level=1)
+                self._style_h1(p)
+                prev_was_heading = True
                 i += 1
                 continue
 
-            # Heading level 2
-            if line.startswith("## "):
-                p = doc.add_heading(line[3:].strip(), level=2)
-                self._style_heading(p, 2)
+            # H2
+            if stripped.startswith('## '):
+                if not prev_was_heading:
+                    sp = doc.add_paragraph()
+                    sp.paragraph_format.space_before = Pt(12)
+                    sp.paragraph_format.space_after  = Pt(0)
+                p = doc.add_heading(stripped[3:].strip(), level=2)
+                self._style_h2(p)
+                prev_was_heading = True
                 i += 1
                 continue
 
-            # Heading level 3
-            if line.startswith("### "):
-                p = doc.add_heading(line[4:].strip(), level=3)
-                self._style_heading(p, 3)
+            # H3
+            if stripped.startswith('### '):
+                p = doc.add_heading(stripped[4:].strip(), level=3)
+                self._style_h3(p)
+                prev_was_heading = True
                 i += 1
                 continue
 
-            # Table (collect all consecutive | lines)
-            if line.startswith("|"):
+            prev_was_heading = False
+
+            # Table
+            if stripped.startswith('|'):
                 table_lines = []
-                while i < len(lines) and lines[i].strip().startswith("|"):
+                while i < len(lines) and lines[i].strip().startswith('|'):
                     table_lines.append(lines[i].strip())
                     i += 1
                 self._render_table(doc, table_lines)
+                doc.add_paragraph().paragraph_format.space_after = Pt(6)
                 continue
 
-            # Bullet list item
-            if line.startswith("- ") or line.startswith("* "):
-                p = doc.add_paragraph(line[2:].strip(), style="List Bullet")
-                p.runs[0].font.size = Pt(10)
+            # Bullet
+            if stripped.startswith('- ') or stripped.startswith('* '):
+                text = stripped[2:].strip()
+                text = self._strip_bold(text)
+                p = doc.add_paragraph(style='List Bullet')
+                self._add_formatted_run(p, text, size=10)
+                p.paragraph_format.space_before = Pt(1)
+                p.paragraph_format.space_after  = Pt(3)
                 i += 1
                 continue
 
-            # Numbered list item
-            if len(line) > 2 and line[0].isdigit() and line[1] in ".)" :
-                text = line[2:].strip()
-                p = doc.add_paragraph(text, style="List Number")
-                p.runs[0].font.size = Pt(10)
+            # Numbered list
+            if re.match(r'^\d+[\.\)]\s', stripped):
+                text = re.sub(r'^\d+[\.\)]\s+', '', stripped)
+                text = self._strip_bold(text)
+                p = doc.add_paragraph(style='List Number')
+                self._add_formatted_run(p, text, size=10)
+                p.paragraph_format.space_before = Pt(1)
+                p.paragraph_format.space_after  = Pt(3)
                 i += 1
                 continue
 
-            # Bold line (standalone ** ** line = informal heading)
-            if line.startswith("**") and line.endswith("**") and len(line) > 4:
+            # Standalone bold line = subheading
+            if stripped.startswith('**') and stripped.endswith('**') and len(stripped) > 4:
+                text = stripped.strip('*').strip()
                 p = doc.add_paragraph()
-                r = p.add_run(line.strip("*").strip())
-                r.bold           = True
-                r.font.size      = Pt(10.5)
+                r = p.add_run(text)
+                r.bold = True
+                r.font.size = Pt(10.5)
                 r.font.color.rgb = NAVY
+                r.font.name = "Calibri"
+                p.paragraph_format.space_before = Pt(8)
+                p.paragraph_format.space_after  = Pt(3)
                 i += 1
                 continue
 
             # Regular paragraph
-            p = doc.add_paragraph(line)
-            p.runs[0].font.size = Pt(10)
-            p.paragraph_format.space_after = Pt(4)
+            text = self._strip_bold(stripped)
+            p = doc.add_paragraph()
+            self._add_formatted_run(p, text, size=10)
+            p.paragraph_format.space_before = Pt(0)
+            p.paragraph_format.space_after  = Pt(5)
+            p.paragraph_format.first_line_indent = Pt(0)
             i += 1
 
+    def _strip_bold(self, text: str) -> str:
+        """Remove markdown bold markers from text."""
+        return re.sub(r'\*\*(.*?)\*\*', r'\1', text)
+
+    def _add_formatted_run(self, p, text: str, size: float = 10, bold: bool = False, colour: RGBColor = None):
+        r = p.add_run(text)
+        r.font.size = Pt(size)
+        r.font.name = "Calibri"
+        r.bold = bold
+        if colour:
+            r.font.color.rgb = colour
+        else:
+            r.font.color.rgb = BLACK
+
     def _render_table(self, doc: Document, table_lines: list):
-        """Render a markdown-style pipe table into a Word table."""
         rows = []
         for line in table_lines:
-            # Skip separator rows (---|---| etc)
-            cells = [c.strip() for c in line.strip("|").split("|")]
-            if all(set(c) <= set("-: ") for c in cells):
+            cells = [c.strip() for c in line.strip('|').split('|')]
+            # Skip separator rows
+            if all(re.match(r'^[-: ]+$', c) for c in cells if c):
                 continue
+            # Clean bold markers from cells
+            cells = [self._strip_bold(c) for c in cells]
             rows.append(cells)
 
         if not rows:
@@ -249,88 +308,116 @@ class EvidencePackBuilder:
 
         ncols = max(len(r) for r in rows)
         tbl   = doc.add_table(rows=len(rows), cols=ncols)
-        tbl.style = "Table Grid"
+        tbl.style = 'Table Grid'
 
         for ri, row_data in enumerate(rows):
-            for ci, cell_text in enumerate(row_data):
-                if ci >= ncols:
-                    break
+            for ci in range(ncols):
+                cell_text = row_data[ci] if ci < len(row_data) else ''
                 cell = tbl.cell(ri, ci)
-                cell.text = cell_text
-                run = cell.paragraphs[0].runs
-                if run:
-                    run[0].font.size = Pt(9)
-                    if ri == 0:
-                        run[0].bold = True
-                        run[0].font.color.rgb = RGBColor(0xFF, 0xFF, 0xFF)
-                        self._set_cell_bg(cell, "0D1B2A")
+                cell.text = ''
+                p = cell.paragraphs[0]
+                r = p.add_run(cell_text)
+                r.font.size = Pt(9)
+                r.font.name = "Calibri"
 
-        doc.add_paragraph()
+                if ri == 0:
+                    r.bold = True
+                    r.font.color.rgb = WHITE
+                    self._set_cell_bg(cell, '0D1B2A')
+                    p.alignment = WD_ALIGN_PARAGRAPH.LEFT
+                else:
+                    r.font.color.rgb = BLACK
+                    if ri % 2 == 0:
+                        self._set_cell_bg(cell, 'F0F4F8')
 
-    def _style_heading(self, p, level: int):
+                cell.paragraphs[0].paragraph_format.space_before = Pt(3)
+                cell.paragraphs[0].paragraph_format.space_after  = Pt(3)
+
+    def _style_h1(self, p):
         for run in p.runs:
-            run.font.name = "Calibri"
-            if level == 1:
-                run.font.size      = Pt(15)
-                run.font.color.rgb = NAVY
-                run.bold           = True
-            elif level == 2:
-                run.font.size      = Pt(12)
-                run.font.color.rgb = NAVY
-                run.bold           = True
-            else:
-                run.font.size      = Pt(10.5)
-                run.font.color.rgb = GREY
-                run.bold           = True
+            run.font.name  = "Calibri"
+            run.font.size  = Pt(16)
+            run.font.color.rgb = NAVY
+            run.bold = True
+        p.paragraph_format.space_before = Pt(14)
+        p.paragraph_format.space_after  = Pt(4)
+        self._add_para_bottom_border(p, "00C2CB", sz=6)
 
-    def _add_hline(self, parent):
-        """Add a thin horizontal line paragraph."""
-        p = parent.add_paragraph()
+    def _style_h2(self, p):
+        for run in p.runs:
+            run.font.name  = "Calibri"
+            run.font.size  = Pt(13)
+            run.font.color.rgb = NAVY
+            run.bold = True
+        p.paragraph_format.space_before = Pt(12)
+        p.paragraph_format.space_after  = Pt(3)
+
+    def _style_h3(self, p):
+        for run in p.runs:
+            run.font.name  = "Calibri"
+            run.font.size  = Pt(11)
+            run.font.color.rgb = CYAN
+            run.bold = True
+        p.paragraph_format.space_before = Pt(8)
+        p.paragraph_format.space_after  = Pt(2)
+
+    def _add_para_bottom_border(self, p, hex_color: str, sz: int = 6):
         pPr = p._p.get_or_add_pPr()
-        pBdr = OxmlElement("w:pBdr")
-        bottom = OxmlElement("w:bottom")
-        bottom.set(qn("w:val"), "single")
-        bottom.set(qn("w:sz"), "4")
-        bottom.set(qn("w:space"), "1")
-        bottom.set(qn("w:color"), "00C2CB")
+        pBdr = OxmlElement('w:pBdr')
+        bottom = OxmlElement('w:bottom')
+        bottom.set(qn('w:val'), 'single')
+        bottom.set(qn('w:sz'), str(sz))
+        bottom.set(qn('w:space'), '1')
+        bottom.set(qn('w:color'), hex_color)
         pBdr.append(bottom)
         pPr.append(pBdr)
 
-    def _add_colour_bar(self, doc: Document, colour: RGBColor):
-        """Add a thin coloured paragraph border as a visual divider."""
-        p = doc.add_paragraph()
+    def _add_cyan_rule(self, parent):
+        p = parent.add_paragraph()
         p.paragraph_format.space_before = Pt(2)
-        p.paragraph_format.space_after  = Pt(6)
+        p.paragraph_format.space_after  = Pt(4)
         pPr = p._p.get_or_add_pPr()
-        pBdr = OxmlElement("w:pBdr")
-        bottom = OxmlElement("w:bottom")
-        bottom.set(qn("w:val"), "single")
-        bottom.set(qn("w:sz"), "12")
-        bottom.set(qn("w:space"), "1")
-        bottom.set(qn("w:color"), f"{colour[0]:02X}{colour[1]:02X}{colour[2]:02X}")
+        pBdr = OxmlElement('w:pBdr')
+        bottom = OxmlElement('w:bottom')
+        bottom.set(qn('w:val'), 'single')
+        bottom.set(qn('w:sz'), '6')
+        bottom.set(qn('w:space'), '1')
+        bottom.set(qn('w:color'), '00C2CB')
+        pBdr.append(bottom)
+        pPr.append(pBdr)
+
+    def _add_thick_rule(self, doc: Document, hex_color: str, thickness: int = 18):
+        p = doc.add_paragraph()
+        p.paragraph_format.space_before = Pt(4)
+        p.paragraph_format.space_after  = Pt(8)
+        pPr = p._p.get_or_add_pPr()
+        pBdr = OxmlElement('w:pBdr')
+        bottom = OxmlElement('w:bottom')
+        bottom.set(qn('w:val'), 'single')
+        bottom.set(qn('w:sz'), str(thickness))
+        bottom.set(qn('w:space'), '1')
+        bottom.set(qn('w:color'), hex_color)
         pBdr.append(bottom)
         pPr.append(pBdr)
 
     def _set_cell_bg(self, cell, hex_color: str):
-        """Set table cell background colour."""
         tc   = cell._tc
         tcPr = tc.get_or_add_tcPr()
-        shd  = OxmlElement("w:shd")
-        shd.set(qn("w:val"), "clear")
-        shd.set(qn("w:color"), "auto")
-        shd.set(qn("w:fill"), hex_color)
+        shd  = OxmlElement('w:shd')
+        shd.set(qn('w:val'), 'clear')
+        shd.set(qn('w:color'), 'auto')
+        shd.set(qn('w:fill'), hex_color)
         tcPr.append(shd)
 
     def _remove_table_borders(self, table):
-        """Remove all borders from a table (used for header layout table)."""
-        tbl  = table._tbl
+        tbl   = table._tbl
         tblPr = tbl.tblPr
         if tblPr is None:
-            tblPr = OxmlElement("w:tblPr")
+            tblPr = OxmlElement('w:tblPr')
             tbl.insert(0, tblPr)
-        tblBorders = OxmlElement("w:tblBorders")
-        for border_name in ["top", "left", "bottom", "right", "insideH", "insideV"]:
-            border = OxmlElement(f"w:{border_name}")
-            border.set(qn("w:val"), "none")
-            tblBorders.append(border)
+        tblBorders = OxmlElement('w:tblBorders')
+        for name in ['top','left','bottom','right','insideH','insideV']:
+            b = OxmlElement(f'w:{name}')
+            b.set(qn('w:val'), 'none')
+            tblBorders.append(b)
         tblPr.append(tblBorders)
