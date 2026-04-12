@@ -1,7 +1,7 @@
 import os
 import stripe
 from fastapi import APIRouter, HTTPException, BackgroundTasks
-from fastapi.responses import FileResponse
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from agents.evidence_agent import EvidencePackAgent
 from services.doc_builder import EvidencePackBuilder
@@ -29,6 +29,27 @@ async def create_checkout(body: CheckoutBody):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+def generate_and_email(payload: dict, session_id: str):
+    """Background task — generate docs and email to customer."""
+    import os as _os
+    try:
+        documents = agent.generate(payload)
+        company   = payload.get("client", {}).get("company_name", "Organisation")
+        email     = payload.get("client", {}).get("contact_email", "")
+        zip_path  = builder.build_zip(company, documents)
+
+        if email:
+            send_evidence_pack_email(email, company, zip_path)
+            send_payment_receipt_email(email, company)
+
+        if _os.path.exists(zip_path):
+            _os.remove(zip_path)
+
+    except Exception as e:
+        print(f"Background generation error: {e}")
+    finally:
+        delete_payload(session_id)
+
 @router.get("/download-pack")
 async def download_pack(session_id: str, background: BackgroundTasks):
     try:
@@ -40,32 +61,19 @@ async def download_pack(session_id: str, background: BackgroundTasks):
         if not payload:
             raise HTTPException(status_code=404, detail="Session expired. Please contact support at hello@ceready.co.uk")
 
-        documents = agent.generate(payload)
-        company   = payload.get("client", {}).get("company_name", "Organisation")
-        email     = payload.get("client", {}).get("contact_email", "")
-        zip_path  = builder.build_zip(company, documents)
+        email   = payload.get("client", {}).get("contact_email", "")
+        company = payload.get("client", {}).get("company_name", "Organisation")
 
-        # Send emails in background after response
-        def send_emails_and_cleanup():
-            import os as _os
-            try:
-                if email:
-                    send_evidence_pack_email(email, company, zip_path)
-                    send_payment_receipt_email(email, company)
-            except Exception as e:
-                print(f"Email error: {e}")
-            finally:
-                if _os.path.exists(zip_path):
-                    _os.remove(zip_path)
+        # Trigger background generation + email
+        background.add_task(generate_and_email, payload, session_id)
 
-        delete_payload(session_id)
-        background.add_task(send_emails_and_cleanup)
-
-        return FileResponse(
-            path=zip_path,
-            media_type="application/zip",
-            filename=f"CyberGuard_EvidencePack_{company.replace(' ', '_')}.zip",
-        )
+        # Return immediately
+        return JSONResponse(content={
+            "status": "processing",
+            "message": f"Your Evidence Pack is being prepared and will be emailed to {email} within 5 minutes.",
+            "email": email,
+            "company": company,
+        })
 
     except HTTPException:
         raise
