@@ -52,7 +52,7 @@ def send_evidence_pack_email(to_email: str, company_name: str, zip_path: str) ->
             "attachments": [
                 {
                     "filename": filename,
-                    "content": zip_bytes,
+                    "content": __import__("base64").b64encode(zip_bytes).decode("utf-8"),
                 }
             ],
         }
