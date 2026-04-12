@@ -153,6 +153,16 @@ class EvidencePackBuilder:
         Handles headings (lines starting with ##), tables (| delimited),
         bullet lists (- prefix), and regular paragraphs.
         """
+        # Unescape literal \n sequences from JSON string content
+        content = content.replace('\\n', '\n').replace('\\"', '"').replace("\\'", "'")
+        # Strip any JSON wrapper if present
+        if content.strip().startswith('{'):
+            try:
+                import json
+                parsed = json.loads(content)
+                content = list(parsed.values())[0] if parsed else content
+            except Exception:
+                pass
         lines = content.split("\n")
         i = 0
         while i < len(lines):
