@@ -13,8 +13,8 @@ class ComplianceAgent:
     Uses Claude Haiku for cost-efficient, high-quality gap analysis.
     """
 
-    MODEL    = "claude-haiku-4-5"
-    MAX_TOKENS = 8096
+    MODEL    = "claude-sonnet-4-20250514"
+    MAX_TOKENS = 16000
 
 
     def __init__(self):
